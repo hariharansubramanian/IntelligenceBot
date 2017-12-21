@@ -66,14 +66,21 @@ namespace Microsoft.Bot.Sample.LuisBot
         private async Task manageCreateIncident(IDialogContext context, LuisResult result)
         {
             Incident incident = new Incident();
-            incident.id = System.Guid.NewGuid().ToString();
+            incident.id = generateRandomId(incident);
             incident.owner = "Hari";
             incident.summary = result.Query;
             incident.status = "New";
-            string str = String.Format("Incident \"{0}\" created by {1} successfuly!\n Incident ID: {2}", incident.summary, incident.owner, incident.id);
+            string str = String.Format("Incident \"{0}\" created by {1} successfuly! Incident ID: {2}", incident.summary, incident.owner, incident.id);
             incidents.Add(incident);
             await context.PostAsync(str);
             context.Wait(MessageReceived);
+        }
+
+        private static string generateRandomId(Incident incident)
+        {
+            Random r = new Random();
+            var x = r.Next(0, 1000000);
+            return x.ToString("000000");
         }
     }
 }
