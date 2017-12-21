@@ -6,6 +6,7 @@ using Microsoft.Bot.Builder.Luis.Models;
 using System;
 using System.Configuration;
 using System.Linq;
+using System.Net.Mail;
 using System.Threading.Tasks;
 
 namespace Microsoft.Bot.Sample.LuisBot
@@ -58,6 +59,13 @@ namespace Microsoft.Bot.Sample.LuisBot
         {
             await this.ManageDeleteIncident(context, result);
         }
+
+        [LuisIntent("workflow")]
+        public async Task InitiateIncidentWorkflow(IDialogContext context, LuisResult result)
+        {
+            await this.ManageWorkflowInitiation(context, result);
+        }
+
 
 
         [LuisIntent("None")]
@@ -179,12 +187,54 @@ namespace Microsoft.Bot.Sample.LuisBot
             }
 
             FakeDb.incidents.RemoveWhere(x => x.id.Equals(id.Entity));
-            // FakeDb.incidents.ToList().RemoveAll((x) => x.id.Equals(id.Entity));
             string str = String.Format("Incident {0} has been deleted successfully! ", id.Entity);
             await context.PostAsync(str);
             context.Wait(MessageReceived);
         }
+        private async Task ManageWorkflowInitiation(IDialogContext context, LuisResult result)
+        {
+            EntityRecommendation id;
+            if (!result.TryFindEntity(ENTITY_INTCIDENT_ID, out id))
+            {
+                await context.PostAsync($"Unable to find this incident. ");
+                context.Wait(MessageReceived);
+            }
+            Incident incidentFromDb = FakeDb.incidents.Where(i => i.id.Equals(id.Entity)).FirstOrDefault();
+            if (incidentFromDb == null)
+            {
+                await context.PostAsync($"Unable to find this incident. ");
+                context.Wait(MessageReceived);
+            }
+            FakeDb.incidents.Where(i => i.id.Equals(id.Entity)).FirstOrDefault().status = "Initiated";
 
+            string str = String.Format("Workflow for Incident {0} is now being executed. Updated status to {1} ", id.Entity, incidentFromDb.status);
+            //TODO: initiate an email
+            sendEmail(incidentFromDb);
+            await context.PostAsync(str);
+            context.Wait(MessageReceived);
+        }
+
+
+
+        private void sendEmail(Incident incidentFromDb)
+        {
+            string mailBody = String.Format("<html>\r\n\r\n<head></head>\r\n<body>Hi Hariharan, <br /> Your incident is now being processed. <br />\r\n <br /> Incident Details: <br /> Id: {0} <br /> Description: {1} <br /> Status: {2}  </body>\r\n</html>", incidentFromDb.id, incidentFromDb.summary, incidentFromDb.status);
+            string mailSubject = String.Format("Incident {0} has been initiated", incidentFromDb.id);
+            System.Net.Mail.MailMessage mail = new System.Net.Mail.MailMessage();
+            SmtpClient SmtpServer = new SmtpClient("smtp.gmail.com");
+
+            mail.From = new MailAddress("tbd.hackathon@gmail.com");
+            mail.To.Add("hariharan.subramanian@ivanti.com");
+            mail.Subject = mailSubject;
+            mail.Body = mailBody;
+            mail.IsBodyHtml = true;
+
+            SmtpServer.Port = 25;
+            SmtpServer.Credentials = new System.Net.NetworkCredential("tbd.hackathon@gmail.com", "tbdtbdtbd");
+            SmtpServer.EnableSsl = true;
+
+            SmtpServer.Send(mail);
+        }
 
         private static string generateRandomId(Incident incident)
         {
