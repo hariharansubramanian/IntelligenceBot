@@ -1,10 +1,11 @@
+using LuisBot.Data;
 using LuisBot.Models;
 using Microsoft.Bot.Builder.Dialogs;
 using Microsoft.Bot.Builder.Luis;
 using Microsoft.Bot.Builder.Luis.Models;
 using System;
-using System.Collections.Generic;
 using System.Configuration;
+using System.Linq;
 using System.Threading.Tasks;
 
 namespace Microsoft.Bot.Sample.LuisBot
@@ -13,16 +14,14 @@ namespace Microsoft.Bot.Sample.LuisBot
     [Serializable]
     public class BasicLuisDialog : LuisDialog<object>
     {
-        HashSet<Incident> incidents;
+        private const string ENTITY_INTCIDENT_ID = "incidentid";
+
         public BasicLuisDialog() : base(new LuisService(new LuisModelAttribute(
             ConfigurationManager.AppSettings["LuisAppId"],
             ConfigurationManager.AppSettings["LuisAPIKey"],
             domain: ConfigurationManager.AppSettings["LuisAPIHostName"])))
         {
-            if (incidents == null)
-            {
-                incidents = new HashSet<Incident>();
-            }
+
         }
 
         [LuisIntent("create")]
@@ -30,6 +29,23 @@ namespace Microsoft.Bot.Sample.LuisBot
         {
             await this.manageCreateIncident(context, result);
         }
+
+        [LuisIntent("retrieve")]
+        public async Task RetrieveIncident(IDialogContext context, LuisResult result)
+        {
+            try
+            {
+                await this.manageRetreiveIncident(context, result);
+            }
+            catch (System.Collections.Generic.KeyNotFoundException)
+            {
+                await context.PostAsync($"Unable to find this incident :( ");
+                context.Wait(MessageReceived);
+
+            }
+
+        }
+
 
         [LuisIntent("None")]
         public async Task NoneIntent(IDialogContext context, LuisResult result)
@@ -71,9 +87,41 @@ namespace Microsoft.Bot.Sample.LuisBot
             incident.summary = result.Query;
             incident.status = "New";
             string str = String.Format("Incident \"{0}\" created by {1} successfuly! Incident ID: {2}", incident.summary, incident.owner, incident.id);
-            incidents.Add(incident);
+            FakeDb.incidents.Add(incident);
             await context.PostAsync(str);
             context.Wait(MessageReceived);
+        }
+
+        private async Task manageRetreiveIncident(IDialogContext context, LuisResult result)
+        {
+            EntityRecommendation id;
+            if (!result.TryFindEntity(ENTITY_INTCIDENT_ID, out id))
+            {
+                await context.PostAsync($"Unable to find this incident :( ");
+                context.Wait(MessageReceived);
+            }
+            else
+            {
+                var retreivedIncident = FakeDb.incidents.Where(i => i.id.Equals(id.Entity)).FirstOrDefault();
+                if (retreivedIncident == null)
+                {
+
+                    await context.PostAsync($"Unable to find this incident :( ");
+                    context.Wait(MessageReceived);
+                }
+                else
+                {
+                    string str = String.Format("Incident Retreived\nIncident owner: \"{0}\"\nIncident summary: {1}\nIncident status {2}\nIncident ID: {3}",
+              retreivedIncident.owner,
+             retreivedIncident.summary,
+             retreivedIncident.status,
+             retreivedIncident.id);
+                    await context.PostAsync(str);
+                    context.Wait(MessageReceived);
+                }
+
+            }
+
         }
 
         private static string generateRandomId(Incident incident)
