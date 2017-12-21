@@ -15,6 +15,7 @@ namespace Microsoft.Bot.Sample.LuisBot
     public class BasicLuisDialog : LuisDialog<object>
     {
         private const string ENTITY_INTCIDENT_ID = "incidentid";
+        private const string ENTITY_INCIDENT_OWNER = "incidentowner";
 
         public BasicLuisDialog() : base(new LuisService(new LuisModelAttribute(
             ConfigurationManager.AppSettings["LuisAppId"],
@@ -44,6 +45,18 @@ namespace Microsoft.Bot.Sample.LuisBot
 
             }
 
+        }
+
+        [LuisIntent("update")]
+        public async Task UpdateIncident(IDialogContext context, LuisResult result)
+        {
+            await this.ManageUpdateIncident(context, result);
+        }
+
+        [LuisIntent("delete")]
+        public async Task DeleteIncident(IDialogContext context, LuisResult result)
+        {
+            await this.ManageDeleteIncident(context, result);
         }
 
 
@@ -97,7 +110,7 @@ namespace Microsoft.Bot.Sample.LuisBot
             EntityRecommendation id;
             if (!result.TryFindEntity(ENTITY_INTCIDENT_ID, out id))
             {
-                await context.PostAsync($"Unable to find this incident :( ");
+                await context.PostAsync($"Unable to find this incident. ");
                 context.Wait(MessageReceived);
             }
             else
@@ -106,7 +119,7 @@ namespace Microsoft.Bot.Sample.LuisBot
                 if (retreivedIncident == null)
                 {
 
-                    await context.PostAsync($"Unable to find this incident :( ");
+                    await context.PostAsync($"Unable to find this incident. ");
                     context.Wait(MessageReceived);
                 }
                 else
@@ -123,6 +136,55 @@ namespace Microsoft.Bot.Sample.LuisBot
             }
 
         }
+
+        private async Task ManageUpdateIncident(IDialogContext context, LuisResult result)
+        {
+            EntityRecommendation id;
+            if (!result.TryFindEntity(ENTITY_INTCIDENT_ID, out id))
+            {
+                await context.PostAsync($"Unable to find this incident. ");
+                context.Wait(MessageReceived);
+            }
+
+            EntityRecommendation owner;
+            if (!result.TryFindEntity(ENTITY_INCIDENT_OWNER, out owner))
+            {
+                await context.PostAsync($"Please provide an authorized owner to update this incident with.");
+                context.Wait(MessageReceived);
+            }
+
+            if (FakeDb.incidents.Where(i => i.id.Equals(id.Entity)).FirstOrDefault() == null)
+            {
+                await context.PostAsync($"Unable to find this incident. ");
+                context.Wait(MessageReceived);
+            }
+            string currentOwner = FakeDb.incidents.Where(i => i.id.Equals(id.Entity)).FirstOrDefault().owner;
+
+            FakeDb.incidents.Where(i => i.id.Equals(id.Entity)).ToList().ForEach(s => s.owner = owner.Entity);
+            string newOwner = FakeDb.incidents.Where(i => i.id.Equals(id.Entity)).FirstOrDefault().owner;
+
+            string str = String.Format("Updated Incident owner from {0} to {1}. ", currentOwner, newOwner);
+            await context.PostAsync(str);
+            context.Wait(MessageReceived);
+
+        }
+
+        private async Task ManageDeleteIncident(IDialogContext context, LuisResult result)
+        {
+            EntityRecommendation id;
+            if (!result.TryFindEntity(ENTITY_INTCIDENT_ID, out id))
+            {
+                await context.PostAsync($"Unable to find this incident. ");
+                context.Wait(MessageReceived);
+            }
+
+            FakeDb.incidents.RemoveWhere(x => x.id.Equals(id.Entity));
+            // FakeDb.incidents.ToList().RemoveAll((x) => x.id.Equals(id.Entity));
+            string str = String.Format("Incident {0} has been deleted successfully! ", id.Entity);
+            await context.PostAsync(str);
+            context.Wait(MessageReceived);
+        }
+
 
         private static string generateRandomId(Incident incident)
         {
