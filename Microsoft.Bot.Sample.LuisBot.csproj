@@ -178,6 +178,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="App_Start\WebApiConfig.cs" />
+    <Compile Include="Data\BingResponse.cs" />
+    <Compile Include="Data\BingValues.cs" />
+    <Compile Include="Data\BingWebPages.cs" />
     <Compile Include="Data\FakeDb.cs" />
     <Compile Include="Dialogs\BasicLuisDialog.cs" />
     <Compile Include="Controllers\MessagesController.cs" />

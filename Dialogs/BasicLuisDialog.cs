@@ -3,9 +3,12 @@ using LuisBot.Models;
 using Microsoft.Bot.Builder.Dialogs;
 using Microsoft.Bot.Builder.Luis;
 using Microsoft.Bot.Builder.Luis.Models;
+using Newtonsoft.Json;
 using System;
 using System.Configuration;
+using System.IO;
 using System.Linq;
+using System.Net;
 using System.Net.Mail;
 using System.Threading.Tasks;
 
@@ -67,19 +70,19 @@ namespace Microsoft.Bot.Sample.LuisBot
         }
 
 
-
         [LuisIntent("None")]
         public async Task NoneIntent(IDialogContext context, LuisResult result)
         {
-            await this.ShowLuisResult(context, result);
+            string resp = BingWebSearch(result.Query);
+            await this.ShowBingResult(context, resp);
         }
 
-        // Go to https://luis.ai and create a new intent, then train/publish your luis app.
-        // Finally replace "Gretting" with the name of your newly created intent in the following handler
-        [LuisIntent("Greeting")]
-        public async Task GreetingIntent(IDialogContext context, LuisResult result)
+
+
+        private async Task ShowBingResult(IDialogContext context, string respnse)
         {
-            await this.ShowLuisResult(context, result);
+            await context.PostAsync(respnse);
+            context.Wait(MessageReceived);
         }
 
         [LuisIntent("Cancel")]
@@ -92,6 +95,18 @@ namespace Microsoft.Bot.Sample.LuisBot
         public async Task HelpIntent(IDialogContext context, LuisResult result)
         {
             await this.ShowLuisResult(context, result);
+        }
+
+        [LuisIntent("Greeting")]
+        public async Task GreetingIntent(IDialogContext context, LuisResult result)
+        {
+            await this.ShowGreetingResult(context, result.Query);
+        }
+
+        private async Task ShowGreetingResult(IDialogContext context, string query)
+        {
+            await context.PostAsync($"Hello, I am Ivantilligence. How can I assist you today?");
+            context.Wait(MessageReceived);
         }
 
         private async Task ShowLuisResult(IDialogContext context, LuisResult result)
@@ -160,20 +175,29 @@ namespace Microsoft.Bot.Sample.LuisBot
                 await context.PostAsync($"Please provide an authorized owner to update this incident with.");
                 context.Wait(MessageReceived);
             }
-
-            if (FakeDb.incidents.Where(i => i.id.Equals(id.Entity)).FirstOrDefault() == null)
+            else
             {
-                await context.PostAsync($"Unable to find this incident. ");
-                context.Wait(MessageReceived);
+                if (FakeDb.incidents.Where(i => i.id.Equals(id.Entity)).FirstOrDefault() == null)
+                {
+                    await context.PostAsync($"Unable to find this incident. ");
+                    context.Wait(MessageReceived);
+                }
+                else
+                {
+                    string currentOwner = FakeDb.incidents.Where(i => i.id.Equals(id.Entity)).FirstOrDefault().owner;
+
+                    FakeDb.incidents.Where(i => i.id.Equals(id.Entity)).ToList().ForEach(s => s.owner = owner.Entity);
+                    string newOwner = FakeDb.incidents.Where(i => i.id.Equals(id.Entity)).FirstOrDefault().owner;
+
+                    string str = String.Format("Updated Incident owner from {0} to {1}. ", currentOwner, newOwner);
+                    await context.PostAsync(str);
+                    context.Wait(MessageReceived);
+                }
+
             }
-            string currentOwner = FakeDb.incidents.Where(i => i.id.Equals(id.Entity)).FirstOrDefault().owner;
 
-            FakeDb.incidents.Where(i => i.id.Equals(id.Entity)).ToList().ForEach(s => s.owner = owner.Entity);
-            string newOwner = FakeDb.incidents.Where(i => i.id.Equals(id.Entity)).FirstOrDefault().owner;
 
-            string str = String.Format("Updated Incident owner from {0} to {1}. ", currentOwner, newOwner);
-            await context.PostAsync(str);
-            context.Wait(MessageReceived);
+
 
         }
 
@@ -205,13 +229,17 @@ namespace Microsoft.Bot.Sample.LuisBot
                 await context.PostAsync($"Unable to find this incident. ");
                 context.Wait(MessageReceived);
             }
-            FakeDb.incidents.Where(i => i.id.Equals(id.Entity)).FirstOrDefault().status = "Initiated";
+            else
+            {
+                FakeDb.incidents.Where(i => i.id.Equals(id.Entity)).FirstOrDefault().status = "Initiated";
 
-            string str = String.Format("Workflow for Incident {0} is now being executed. Updated status to {1} ", id.Entity, incidentFromDb.status);
-            //TODO: initiate an email
-            sendEmail(incidentFromDb);
-            await context.PostAsync(str);
-            context.Wait(MessageReceived);
+                string str = String.Format("Workflow for Incident {0} is now being executed. Updated status to {1} ", id.Entity, incidentFromDb.status);
+                //TODO: initiate an email
+                sendEmail(incidentFromDb);
+                await context.PostAsync(str);
+                context.Wait(MessageReceived);
+            }
+
         }
 
 
@@ -241,6 +269,28 @@ namespace Microsoft.Bot.Sample.LuisBot
             Random r = new Random();
             var x = r.Next(0, 1000000);
             return x.ToString("000000");
+        }
+        static string BingWebSearch(string searchQuery)
+        {
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+            string accessKey = "526d877ff5d4401aafe42d6f8696e642";
+            string uriBase = "https://api.cognitive.microsoft.com/bing/v7.0/search";
+
+            // Construct the URI of the search request
+            var uriQuery = uriBase + "?q=" + Uri.EscapeDataString(searchQuery) + "&answerCount=2&responseFilter=webpages";
+
+            // Perform the Web request and get the response
+            WebRequest request = HttpWebRequest.Create(uriQuery);
+            request.Headers["Ocp-Apim-Subscription-Key"] = accessKey;
+            HttpWebResponse response = (HttpWebResponse)request.GetResponseAsync().Result;
+            string json = new StreamReader(response.GetResponseStream()).ReadToEnd();
+
+
+            // Console.WriteLine(json);
+
+            BingResponse obj = JsonConvert.DeserializeObject<BingResponse>(json);
+
+            return obj.webPages.value[0].snippet;
         }
     }
 }
